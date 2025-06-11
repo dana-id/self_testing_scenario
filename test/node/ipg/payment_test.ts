@@ -1,4 +1,4 @@
-import Dana from 'dana-node-api-client';
+import Dana from 'dana-node';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
