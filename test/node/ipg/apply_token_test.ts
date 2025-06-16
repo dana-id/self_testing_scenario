@@ -6,7 +6,7 @@ import { fail } from 'assert';
 import { getRequest } from '../helper/util';
 import { assertResponse, assertFailResponse } from '../helper/assertion';
 import { executeManualApiRequest } from '../helper/apiHelpers';
-const { automateOAuth } = require('../automate-oauth');
+import { generateAuthCode } from '../helper/auth-utils';
 
 dotenv.config();
 
@@ -20,21 +20,6 @@ const dana = new Dana({
     env: process.env.ENV || 'sandbox',
 });
 
-function generateAuthCode(phoneNumber?: string, pinCode?: string): Promise<string> {
-    return automateOAuth(phoneNumber, pinCode)
-        .then((authCode: any) => {
-            if (typeof authCode === 'string' && authCode) {
-                return authCode;
-            }
-            if (authCode && typeof authCode === 'object' && authCode.auth_code) {
-                return authCode.auth_code;
-            }
-            throw new Error('auth_code not found in automateOAuth result');
-        })
-        .catch((error: any) => {
-            throw new Error(`Failed to get auth_code: ${error.message}`);
-        });
-}
 
 // Utility function to generate unique reference numbers (if needed in future)
 function generateReferenceNo(): string {

@@ -7,7 +7,7 @@ import { getRequest } from '../helper/util';
 import { assertResponse, assertFailResponse } from '../helper/assertion';
 import { ApplyOTTRequest, ApplyOTTRequestAdditionalInfo, ApplyTokenRequest } from 'dana-node/dist/ipg/v1';
 import { executeManualApiRequest } from '../helper/apiHelpers';
-const { automateOAuth } = require('../automate-oauth');
+import { generateAuthCode } from '../helper/auth-utils';
 
 dotenv.config();
 
@@ -21,32 +21,20 @@ const dana = new Dana({
     env: process.env.ENV || 'sandbox',
 });
 
-function generateAuthCode(phoneNumber?: string, pinCode?: string): Promise<string> {
-    return automateOAuth(phoneNumber, pinCode)
-        .then((authCode: any) => {
-            if (typeof authCode === 'string' && authCode) {
-                return authCode;
-            }
-            if (authCode && typeof authCode === 'object' && authCode.auth_code) {
-                return authCode.auth_code;
-            }
-            throw new Error('auth_code not found in automateOAuth result');
-        })
-        .catch((error: any) => {
-            throw new Error(`Failed to get auth_code: ${error.message}`);
-        });
-}
-
+/**
+ * Generate an access token for testing using an auth code from the helper utility
+ * @param phoneNumber Optional phone number for OAuth flow
+ * @param pinCode Optional PIN code for OAuth flow
+ * @returns Promise resolving to access token string
+ */
 async function generateApplyToken(phoneNumber?: string, pinCode?: string): Promise<string> {
     const caseName = 'ApplyTokenSuccess';
     const requestData: ApplyTokenRequest = getRequest<ApplyTokenRequest>(jsonPathFile, "ApplyToken", caseName);
 
     requestData.authCode = await generateAuthCode(phoneNumber, pinCode);
 
-    return dana.ipgApi.applyToken(requestData)
-        .then((response: any) => {
-            return response.accessToken;
-        });
+    const response = await dana.ipgApi.applyToken(requestData);
+    return response.accessToken;
 }
 
 describe('ApplyOtt Tests', () => {
