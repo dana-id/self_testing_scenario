@@ -1,10 +1,13 @@
-import Dana from 'dana-node';
+import Dana, { ResponseError } from 'dana-node';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 import { fail } from 'assert';
 import { getRequest } from '../helper/util';
 import { assertResponse, assertFailResponse } from '../helper/assertion';
+import { ApplyOTTRequest, ApplyOTTRequestAdditionalInfo, ApplyTokenRequest } from 'dana-node/dist/ipg/v1';
+import { executeManualApiRequest } from '../helper/apiHelpers';
+const { automateOAuth } = require('../automate-oauth');
 
 dotenv.config();
 
@@ -18,14 +21,43 @@ const dana = new Dana({
     env: process.env.ENV || 'sandbox',
 });
 
-function generateReferenceNo(): string {
-    return uuidv4();
+function generateAuthCode(phoneNumber?: string, pinCode?: string): Promise<string> {
+    return automateOAuth(phoneNumber, pinCode)
+        .then((authCode: any) => {
+            if (typeof authCode === 'string' && authCode) {
+                return authCode;
+            }
+            if (authCode && typeof authCode === 'object' && authCode.auth_code) {
+                return authCode.auth_code;
+            }
+            throw new Error('auth_code not found in automateOAuth result');
+        })
+        .catch((error: any) => {
+            throw new Error(`Failed to get auth_code: ${error.message}`);
+        });
 }
 
-describe.skip('ApplyOtt Tests', () => {
-    test.skip('should successfully apply OTT', async () => {
+async function generateApplyToken(phoneNumber?: string, pinCode?: string): Promise<string> {
+    const caseName = 'ApplyTokenSuccess';
+    const requestData: ApplyTokenRequest = getRequest<ApplyTokenRequest>(jsonPathFile, "ApplyToken", caseName);
+
+    requestData.authCode = await generateAuthCode(phoneNumber, pinCode);
+
+    return dana.ipgApi.applyToken(requestData)
+        .then((response: any) => {
+            return response.accessToken;
+        });
+}
+
+describe('ApplyOtt Tests', () => {
+    test('should successfully apply OTT', async () => {
         const caseName = 'ApplyOttSuccess';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+
+        requestData.additionalInfo.accessToken = await generateApplyToken();
+
+        console.log('Request Data:', JSON.stringify(requestData, null, 2));
+
         try {
             const response = await dana.ipgApi.applyOTT(requestData);
             await assertResponse(jsonPathFile, titleCase, caseName, response);
@@ -34,39 +66,108 @@ describe.skip('ApplyOtt Tests', () => {
         }
     });
 
-    test.skip('should fail to apply OTT with invalid format', async () => {
+    test('should fail to apply OTT with invalid format', async () => {
         const caseName = 'ApplyOttFailInvalidFormat';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+        requestData.additionalInfo.accessToken = await generateApplyToken();
+
         try {
-            const response = await dana.ipgApi.applyOTT(requestData);
-            await assertFailResponse(jsonPathFile, titleCase, caseName, response);
+            await dana.ipgApi.applyOTT(requestData);
             fail('Expected an error but the API call succeeded');
-        } catch (e: any) { }
+        } catch (e: any) {
+            if (e instanceof ResponseError && Number(e.status) === 400) {
+                // Expected error for invalid format
+                await assertFailResponse(jsonPathFile, titleCase, caseName, e.rawResponse);
+            } else if (e instanceof ResponseError && Number(e.status) === 401) {
+                // Expected error for invalid signature
+                fail("Expected unauthorized failed but got status code " + e.status);
+            } else {
+                // Unexpected error
+                console.error('Unexpected error:', e);
+            }
+        }
+
     });
 
-    test.skip('should fail to apply OTT with missing or invalid mandatory field', async () => {
+    test('should fail to apply OTT with missing or invalid mandatory field', async () => {
         const caseName = 'ApplyOttFailMissingOrInvalidMandatoryField';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
         try {
-            const response = await dana.ipgApi.applyOTT(requestData);
-            await assertFailResponse(jsonPathFile, titleCase, caseName, response);
+            const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+
+            const baseUrl: string = 'https://api.sandbox.dana.id/';
+            const apiPath: string = '/rest/v1.1/qr/apply-ott';
+            const customHeaders: Record<string, string> = {
+                'X-TIMESTAMP': ""
+            };
+
+            await executeManualApiRequest(
+                caseName,
+                "POST",
+                baseUrl + apiPath,
+                apiPath,
+                requestData,
+                customHeaders,
+            );
             fail('Expected an error but the API call succeeded');
-        } catch (e: any) { }
+        } catch (e: any) {
+            if (Number(e.status) === 400) {
+                // Expected error for invalid format
+                await assertFailResponse(jsonPathFile, titleCase, caseName, JSON.stringify(e.rawResponse));
+            }
+            else if (e instanceof ResponseError) {
+                // Expected error for invalid signature
+                fail("Expected unauthorized failed but got status code " + e.status);
+            } else {
+                throw e;
+            }
+        }
     });
 
-    test.skip('should fail to apply OTT with invalid signature', async () => {
+    test('should fail to apply OTT with invalid signature', async () => {
         const caseName = 'ApplyOttFailInvalidSignature';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+        requestData.additionalInfo.accessToken = await generateApplyToken();
+        // Custom headers: use invalid signature to trigger authorization error
+
+
         try {
-            const response = await dana.ipgApi.applyOTT(requestData);
-            await assertFailResponse(jsonPathFile, titleCase, caseName, response);
-            fail('Expected an error but the API call succeeded');
-        } catch (e: any) { }
+            const baseUrl: string = 'https://api.sandbox.dana.id/';
+            const apiPath: string = '/rest/v1.1/qr/apply-ott';
+
+            const customHeaders: Record<string, string> = {
+                'Authorization-Customer': 'Bearer ' + requestData.additionalInfo.accessToken,
+                'X-DEVICE-ID': '1234567890',
+                'X-SIGNATURE': '85be817c55b2c135157c7e89f52499bf0c25ad6eeebe04a986e8c862561b19a5'
+            };
+            // Make direct API call with invalid signature
+            await executeManualApiRequest(
+                caseName,
+                "POST",
+                baseUrl + apiPath,
+                apiPath,
+                requestData,
+                customHeaders
+            );
+
+            fail("Expected an error but the API call succeeded");
+        } catch (e: any) {
+            // Expecting a 401 Unauthorized error
+            if (Number(e.status) === 401) {
+                await assertFailResponse(jsonPathFile, titleCase, caseName, JSON.stringify(e.rawResponse));
+            } else if (e instanceof ResponseError && Number(e.status) !== 401) {
+                fail("Expected unauthorized failed but got status code " + e.status + JSON.stringify(e.rawResponse));
+            } else {
+                throw e;
+            }
+        }
     });
 
-    test.skip('should fail to apply OTT with token expired', async () => {
+    test('should fail to apply OTT with token expired', async () => {
         const caseName = 'ApplyOttFailTokenExpired';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+
+        requestData.additionalInfo.accessToken = await generateApplyToken("08551003634", "574008");
+
         try {
             const response = await dana.ipgApi.applyOTT(requestData);
             await assertFailResponse(jsonPathFile, titleCase, caseName, response);
@@ -74,9 +175,10 @@ describe.skip('ApplyOtt Tests', () => {
         } catch (e: any) { }
     });
 
-    test.skip('should fail to apply OTT with token not found', async () => {
+    test('should fail to apply OTT with token not found', async () => {
         const caseName = 'ApplyOttFailTokenNotFound';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+        requestData.additionalInfo.accessToken = uuidv4(); // Use a random token to simulate not found
         try {
             const response = await dana.ipgApi.applyOTT(requestData);
             await assertFailResponse(jsonPathFile, titleCase, caseName, response);
@@ -84,9 +186,10 @@ describe.skip('ApplyOtt Tests', () => {
         } catch (e: any) { }
     });
 
-    test.skip('should fail to apply OTT with invalid user status', async () => {
+    test('should fail to apply OTT with invalid user status', async () => {
         const caseName = 'ApplyOttFailInvalidUserStatus';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+        requestData.additionalInfo.accessToken = await generateApplyToken("0855100800", "146838");
         try {
             const response = await dana.ipgApi.applyOTT(requestData);
             await assertFailResponse(jsonPathFile, titleCase, caseName, response);
@@ -96,7 +199,8 @@ describe.skip('ApplyOtt Tests', () => {
 
     test.skip('should fail to apply OTT with non-retryable error', async () => {
         const caseName = 'ApplyOttFailNonRetryableError';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+        requestData.additionalInfo.accessToken = await generateApplyToken("0815919191", "945922");
         try {
             const response = await dana.ipgApi.applyOTT(requestData);
             await assertFailResponse(jsonPathFile, titleCase, caseName, response);
@@ -106,7 +210,8 @@ describe.skip('ApplyOtt Tests', () => {
 
     test.skip('should fail to apply OTT with internal server error', async () => {
         const caseName = 'ApplyOttFailInternalServerError';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+        requestData.additionalInfo.accessToken = await generateApplyToken("081298055132", "677832");
         try {
             const response = await dana.ipgApi.applyOTT(requestData);
             await assertFailResponse(jsonPathFile, titleCase, caseName, response);
@@ -116,7 +221,8 @@ describe.skip('ApplyOtt Tests', () => {
 
     test.skip('should fail to apply OTT with unexpected response', async () => {
         const caseName = 'ApplyOttFailUnexpectedResponse';
-        const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
+        requestData.additionalInfo.accessToken = await generateApplyToken("08121532586", "944279");
         try {
             const response = await dana.ipgApi.applyOTT(requestData);
             await assertFailResponse(jsonPathFile, titleCase, caseName, response);

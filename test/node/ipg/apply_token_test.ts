@@ -1,10 +1,12 @@
-import Dana from 'dana-node';
+import Dana, { ResponseError } from 'dana-node';
 import { v4 as uuidv4 } from 'uuid';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 import { fail } from 'assert';
 import { getRequest } from '../helper/util';
 import { assertResponse, assertFailResponse } from '../helper/assertion';
+import { executeManualApiRequest } from '../helper/apiHelpers';
+const { automateOAuth } = require('../automate-oauth');
 
 dotenv.config();
 
@@ -18,15 +20,32 @@ const dana = new Dana({
     env: process.env.ENV || 'sandbox',
 });
 
+function generateAuthCode(phoneNumber?: string, pinCode?: string): Promise<string> {
+    return automateOAuth(phoneNumber, pinCode)
+        .then((authCode: any) => {
+            if (typeof authCode === 'string' && authCode) {
+                return authCode;
+            }
+            if (authCode && typeof authCode === 'object' && authCode.auth_code) {
+                return authCode.auth_code;
+            }
+            throw new Error('auth_code not found in automateOAuth result');
+        })
+        .catch((error: any) => {
+            throw new Error(`Failed to get auth_code: ${error.message}`);
+        });
+}
+
 // Utility function to generate unique reference numbers (if needed in future)
 function generateReferenceNo(): string {
     return uuidv4();
 }
 
-describe.skip('ApplyToken Tests', () => {
-    test.skip('should successfully apply token', async () => {
+describe('ApplyToken Tests', () => {
+    test('should successfully apply token', async () => {
         const caseName = 'ApplyTokenSuccess';
         const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        requestData.authCode = await generateAuthCode();
         try {
             const response = await dana.ipgApi.applyToken(requestData);
             await assertResponse(jsonPathFile, titleCase, caseName, response);
@@ -45,9 +64,13 @@ describe.skip('ApplyToken Tests', () => {
         } catch (e: any) { }
     });
 
-    test.skip('should fail to apply token with used authcode', async () => {
+    test('should fail to apply token with used authcode', async () => {
         const caseName = 'ApplyTokenFailAuthcodeUsed';
         const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        requestData.authCode = await generateAuthCode();
+        // First apply token to use the auth code
+        await dana.ipgApi.applyToken(requestData);
+        // Now try to apply token again with the same auth code
         try {
             const response = await dana.ipgApi.applyToken(requestData);
             await assertFailResponse(jsonPathFile, titleCase, caseName, response);
@@ -55,9 +78,10 @@ describe.skip('ApplyToken Tests', () => {
         } catch (e: any) { }
     });
 
-    test.skip('should fail to apply token with invalid authcode', async () => {
+    test('should fail to apply token with invalid authcode', async () => {
         const caseName = 'ApplyTokenFailAuthcodeInvalid';
         const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        requestData.authCode = 'invalid_auth_code'; // Use an invalid auth code
         try {
             const response = await dana.ipgApi.applyToken(requestData);
             await assertFailResponse(jsonPathFile, titleCase, caseName, response);
@@ -75,23 +99,75 @@ describe.skip('ApplyToken Tests', () => {
         } catch (e: any) { }
     });
 
-    test.skip('should fail to apply token with invalid mandatory fields', async () => {
+    test('should fail to apply token with invalid mandatory fields', async () => {
         const caseName = 'ApplyTokenFailInvalidMandatoryFields';
         const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        requestData.authCode = "aklsdkalskdw1232ds"; // Ensure authCode is present
+
+        const customHeaders: Record<string, string> = {
+            'X-TIMESTAMP': '', // Use an invalid timestamp for testing
+        }
         try {
-            const response = await dana.ipgApi.applyToken(requestData);
-            await assertFailResponse(jsonPathFile, titleCase, caseName, response);
+            const baseUrl: string = 'https://api.sandbox.dana.id';
+            const apiPath: string = '/v1.0/access-token/b2b2c.htm';
+
+            await executeManualApiRequest(
+                caseName,
+                "POST",
+                baseUrl + apiPath,
+                apiPath,
+                requestData,
+                customHeaders
+            );
+
             fail('Expected an error but the API call succeeded');
-        } catch (e: any) { }
+        } catch (e: any) {
+            if (Number(e.status) === 400) {
+                // Expected error for invalid mandatory fields
+                await assertFailResponse(jsonPathFile, titleCase, caseName, JSON.stringify(e.rawResponse));
+            }
+            else if (e instanceof ResponseError) {
+                // Expected error for invalid signature
+                fail("Expected unauthorized failed but got status code " + e.status);
+            }
+            else {
+                throw e;
+            }
+        }
     });
 
     test.skip('should fail to apply token with invalid signature', async () => {
         const caseName = 'ApplyTokenFailInvalidSignature';
         const requestData: any = getRequest(jsonPathFile, titleCase, caseName);
+        const customHeaders: Record<string, string> = {
+            'X-SIGNATURE': '', // Use an invalid timestamp for testing
+        }
         try {
-            const response = await dana.ipgApi.applyToken(requestData);
-            await assertFailResponse(jsonPathFile, titleCase, caseName, response);
+            const baseUrl: string = 'https://api.sandbox.dana.id';
+            const apiPath: string = '/v1.0/access-token/b2b2c.htm';
+
+            await executeManualApiRequest(
+                caseName,
+                "POST",
+                baseUrl + apiPath,
+                apiPath,
+                requestData,
+                customHeaders
+            );
+
             fail('Expected an error but the API call succeeded');
-        } catch (e: any) { }
+        } catch (e: any) {
+            if (Number(e.status) === 401) {
+                // Expected error for invalid signature
+                await assertFailResponse(jsonPathFile, titleCase, caseName, JSON.stringify(e.rawResponse));
+            }
+            else if (e instanceof ResponseError) {
+                // Expected error for invalid signature
+                fail("Expected unauthorized failed but got status code " + e.status);
+            }
+            else {
+                throw e;
+            }
+        }
     });
 });
