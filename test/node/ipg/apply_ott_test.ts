@@ -43,9 +43,6 @@ describe('ApplyOtt Tests', () => {
         const requestData: ApplyOTTRequest = getRequest<ApplyOTTRequest>(jsonPathFile, titleCase, caseName);
 
         requestData.additionalInfo.accessToken = await generateApplyToken();
-
-        console.log('Request Data:', JSON.stringify(requestData, null, 2));
-
         try {
             const response = await dana.ipgApi.applyOTT(requestData);
             await assertResponse(jsonPathFile, titleCase, caseName, response);

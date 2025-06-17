@@ -17,8 +17,8 @@ dotenv.config();
 const titleCase = 'Payment';
 const jsonPathFile = path.resolve(__dirname, '../../../resource/request/components/IPG.json');
 const merchantId = process.env.MERCHANT_ID || '';
-const apiUrl = '/rest/redirection/v1.0/debit/payment-host-to-host';
-const baseUrl = 'https://api.sandbox.dana.id/';
+const apiUrl: string = '/rest/redirection/v1.0/debit/payment-host-to-host';
+const baseUrl: string = 'https://api.sandbox.dana.id/';
 
 // Initialize DANA API client with credentials from environment variables
 const dana = new Dana({
