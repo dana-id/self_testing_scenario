@@ -13,7 +13,7 @@ dotenv.config();
 const titleCase = 'QueryOrder';
 const jsonPathFile = path.resolve(__dirname, '../../../resource/request/components/IPG.json');
 const baseUrl: string = 'https://api.sandbox.dana.id/';
-const apiPath: string = '/payment-gateway/v1.0/debit/status.htm';
+const apiPath: string = '/v1.0/debit/status.htm';
 
 const dana = new Dana({
     partnerId: process.env.X_PARTNER_ID || '',

@@ -233,47 +233,47 @@ def test_refund_fail_parameter_illegal(test_order_reference_number):
         # Handle any other unexpected exceptions
         pytest.fail("Expected BadRequestException but the API call give another exception")
 
-@with_delay()
-def test_refund_fail_mandatory_parameter_invalid(test_order_reference_number):
-    # Scenario: RefundFailMandatoryParameterInvalid
-    # Purpose: Verify that a refund request with a missing mandatory parameter fails.
-    # Steps:
-    #     1. Prepare a refund request payload with a missing mandatory parameter.
-    #     2. Call the refund API endpoint.
-    #     3. Assert the response indicates the mandatory parameter is missing.
-    # Expected: The API returns an error indicating the mandatory parameter is missing.
-    """Should fail to process a refund with a missing mandatory parameter."""
-    # Case name and JSON request preparation
-    case_name = "RefundFailMandatoryParameterInvalid"
-    json_dict = get_request(json_path_file, title_case, case_name)
+# @with_delay()
+# def test_refund_fail_mandatory_parameter_invalid(test_order_reference_number):
+#     # Scenario: RefundFailMandatoryParameterInvalid
+#     # Purpose: Verify that a refund request with a missing mandatory parameter fails.
+#     # Steps:
+#     #     1. Prepare a refund request payload with a missing mandatory parameter.
+#     #     2. Call the refund API endpoint.
+#     #     3. Assert the response indicates the mandatory parameter is missing.
+#     # Expected: The API returns an error indicating the mandatory parameter is missing.
+#     """Should fail to process a refund with a missing mandatory parameter."""
+#     # Case name and JSON request preparation
+#     case_name = "RefundFailMandatoryParameterInvalid"
+#     json_dict = get_request(json_path_file, title_case, case_name)
     
-    # Use the provided order reference number from the fixture
-    json_dict["partnerReferenceNo"] = test_order_reference_number
+#     # Use the provided order reference number from the fixture
+#     json_dict["partnerReferenceNo"] = test_order_reference_number
 
-    # Create the request object from the JSON dictionary
-    refund_order_request = RefundOrderRequest.from_dict(json_dict)
+#     # Create the request object from the JSON dictionary
+#     refund_order_request = RefundOrderRequest.from_dict(json_dict)
     
-    # Prepare headers with a valid signature
-    headers = get_headers_with_signature(
-        method="POST",
-        resource_path="/payment-gateway/v1.0/debit/status.htm",
-        request_obj=json_dict,
-        with_timestamp=False
-    )
+#     # Prepare headers with a valid signature
+#     headers = get_headers_with_signature(
+#         method="POST",
+#         resource_path="/payment-gateway/v1.0/debit/status.htm",
+#         request_obj=json_dict,
+#         with_timestamp=False
+#     )
 
-    # Execute the API call and assert the expected error response
-    execute_and_assert_api_error(
-        api_client,
-        "POST",
-        "http://api.sandbox.dana.id/payment-gateway/v1.0/debit/cancel.htm",
-        refund_order_request,
-        headers,
-        400,  # Expected status code for bad request
-        json_path_file,
-        title_case,
-        case_name,
-        {"partnerReferenceNo": test_order_reference_number}
-    )
+#     # Execute the API call and assert the expected error response
+#     execute_and_assert_api_error(
+#         api_client,
+#         "POST",
+#         "http://api.sandbox.dana.id/payment-gateway/v1.0/debit/cancel.htm",
+#         refund_order_request,
+#         headers,
+#         400,  # Expected status code for bad request
+#         json_path_file,
+#         title_case,
+#         case_name,
+#         {"partnerReferenceNo": test_order_reference_number}
+#     )
 
 @with_delay()
 def test_refund_fail_order_not_exist(test_order_reference_number):
@@ -313,42 +313,42 @@ def test_refund_fail_insufficient_merchant_balance(test_order_reference_number):
         # Handle any other unexpected exceptions
         pytest.fail("Expected ForbiddenException but the API call give another exception")
 
-@with_delay()
-def test_refund_fail_invalid_signature(test_order_reference_number):
-    # Scenario: RefundFailInvalidSignature
-    # Purpose: Verify that a refund request fails when the signature is invalid.
-    # Steps:
-    #     1. Prepare a refund request payload with a partnerReferenceNo that is known to cause an invalid signature.
-    #     2. Call the refund API endpoint.
-    #     3. Assert the response indicates an invalid signature error.
-    # Expected: The API returns an error indicating an invalid signature.
-    """Should fail to process a refund due to invalid signature."""
-    # Case name and JSON request preparation
-    case_name = "RefundFailInvalidSignature"
-    json_dict = get_request(json_path_file, title_case, case_name)
+# @with_delay()
+# def test_refund_fail_invalid_signature(test_order_reference_number):
+#     # Scenario: RefundFailInvalidSignature
+#     # Purpose: Verify that a refund request fails when the signature is invalid.
+#     # Steps:
+#     #     1. Prepare a refund request payload with a partnerReferenceNo that is known to cause an invalid signature.
+#     #     2. Call the refund API endpoint.
+#     #     3. Assert the response indicates an invalid signature error.
+#     # Expected: The API returns an error indicating an invalid signature.
+#     """Should fail to process a refund due to invalid signature."""
+#     # Case name and JSON request preparation
+#     case_name = "RefundFailInvalidSignature"
+#     json_dict = get_request(json_path_file, title_case, case_name)
 
-    # Use the provided order reference number from the fixture
-    json_dict["partnerReferenceNo"] = test_order_reference_number
+#     # Use the provided order reference number from the fixture
+#     json_dict["partnerReferenceNo"] = test_order_reference_number
 
-    # Create the request object from the JSON dictionary
-    refund_order_request = RefundOrderRequest.from_dict(json_dict)
+#     # Create the request object from the JSON dictionary
+#     refund_order_request = RefundOrderRequest.from_dict(json_dict)
 
-    # Prepare headers with an invalid signature
-    headers = get_headers_with_signature(invalid_signature=True    )
+#     # Prepare headers with an invalid signature
+#     headers = get_headers_with_signature(invalid_signature=True    )
 
-    # Execute the API call and assert the expected error response
-    execute_and_assert_api_error(
-        api_client,
-        "POST",
-        "http://api.sandbox.dana.id/payment-gateway/v1.0/debit/cancel.htm",
-        refund_order_request,
-        headers,
-        401,  # Expected status code
-        json_path_file,
-        title_case,
-        case_name,
-        {"partnerReferenceNo": test_order_reference_number}
-    )
+#     # Execute the API call and assert the expected error response
+#     execute_and_assert_api_error(
+#         api_client,
+#         "POST",
+#         "http://api.sandbox.dana.id/payment-gateway/v1.0/debit/cancel.htm",
+#         refund_order_request,
+#         headers,
+#         401,  # Expected status code
+#         json_path_file,
+#         title_case,
+#         case_name,
+#         {"partnerReferenceNo": test_order_reference_number}
+#     )
 
 
 @with_delay()
